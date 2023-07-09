@@ -1,5 +1,5 @@
 import {getHttpEndpoint} from "@orbs-network/ton-access";
-import {Address, Slice, TonClient} from "ton";
+import {Address, Slice, TonClient, TupleReader} from "ton";
 import {Sha256} from "@aws-crypto/sha256-js";
 import axios from "axios";
 import {parseDict} from "ton-core/dist/dict/parseDict";
@@ -37,16 +37,7 @@ const sha256 = (str: string) => {
     return Buffer.from(sha.digestSync());
 };
 
-async function readJettonMetadata(client: TonClient, address: string): Promise<{
-    persistenceType: persistenceType;
-    metadata: { [s in JettonMetaDataKeys]?: string };
-    isJettonDeployerFaultyOnChainData?: boolean;
-}> {
-    const jettonMinterAddress = Address.parse(address);
-
-    const res = await client.runMethod( jettonMinterAddress, 'get_jetton_data');
-    res.stack.skip(3)
-
+async function readContent(res: { gas_used: number; stack: TupleReader }) {
     const contentCell = res.stack.readCell()
     const contentSlice = contentCell.beginParse()
 
@@ -57,7 +48,7 @@ async function readJettonMetadata(client: TonClient, address: string): Promise<{
                 ...parseJettonOnchainMetadata(contentSlice),
             };
         case OFFCHAIN_CONTENT_PREFIX:
-            const { metadata, isIpfs } = await parseJettonOffchainMetadata(contentSlice);
+            const {metadata, isIpfs} = await parseJettonOffchainMetadata(contentSlice);
             return {
                 persistenceType: isIpfs ? "offchain_ipfs" : "offchain_private_domain",
                 metadata,
@@ -65,7 +56,23 @@ async function readJettonMetadata(client: TonClient, address: string): Promise<{
         default:
             throw new Error("Unexpected jetton metadata content prefix");
     }
+}
 
+async function readNftMetadata(client: TonClient, address: string) {
+    const nftCollectionAddress = Address.parse(address);
+    const res = await client.runMethod(nftCollectionAddress, "get_collection_data")
+    res.stack.skip(1)
+
+    return await readContent(res);
+}
+
+async function readJettonMetadata(client: TonClient, address: string) {
+    const jettonMinterAddress = Address.parse(address);
+
+    const res = await client.runMethod( jettonMinterAddress, 'get_jetton_data');
+    res.stack.skip(3)
+
+    return await readContent(res)
 }
 
 function parseJettonOnchainMetadata(contentSlice: Slice) : {
@@ -137,8 +144,10 @@ async function parseJettonOffchainMetadata(contentSlice: Slice): Promise<{
 async function main() {
     const endpoint = await getHttpEndpoint({network: "mainnet"})
     const client = new TonClient({endpoint})
-    const data = await readJettonMetadata(client, 'EQANasbzD5wdVx0qikebkchrH64zNgsB38oC9PVu7rG16qNB')
-    console.log(data)
+    const jettonData = await readJettonMetadata(client, 'EQANasbzD5wdVx0qikebkchrH64zNgsB38oC9PVu7rG16qNB')
+    const nftData = await readNftMetadata(client, "EQCvYf5W36a0zQrS_wc6PMKg6JnyTcFU56NPx1PrAW63qpvt")
+    console.log(jettonData)
+    console.log(nftData)
 }
 
 main()
