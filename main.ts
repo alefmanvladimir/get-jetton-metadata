@@ -37,7 +37,11 @@ const sha256 = (str: string) => {
     return Buffer.from(sha.digestSync());
 };
 
-async function readContent(res: { gas_used: number; stack: TupleReader }) {
+async function readContent(res: { gas_used: number; stack: TupleReader }) : Promise<{
+    persistenceType: persistenceType;
+    metadata: { [s in JettonMetaDataKeys]?: string };
+    isJettonDeployerFaultyOnChainData?: boolean;
+}> {
     const contentCell = res.stack.readCell()
     const contentSlice = contentCell.beginParse()
 
@@ -58,7 +62,11 @@ async function readContent(res: { gas_used: number; stack: TupleReader }) {
     }
 }
 
-async function readNftMetadata(client: TonClient, address: string) {
+async function readNftMetadata(client: TonClient, address: string) : Promise<{
+    persistenceType: persistenceType;
+    metadata: { [s in JettonMetaDataKeys]?: string };
+    isJettonDeployerFaultyOnChainData?: boolean;
+}> {
     const nftCollectionAddress = Address.parse(address);
     const res = await client.runMethod(nftCollectionAddress, "get_collection_data")
     res.stack.skip(1)
@@ -66,7 +74,11 @@ async function readNftMetadata(client: TonClient, address: string) {
     return await readContent(res);
 }
 
-async function readJettonMetadata(client: TonClient, address: string) {
+async function readJettonMetadata(client: TonClient, address: string) : Promise<{
+    persistenceType: persistenceType;
+    metadata: { [s in JettonMetaDataKeys]?: string };
+    isJettonDeployerFaultyOnChainData?: boolean;
+}> {
     const jettonMinterAddress = Address.parse(address);
 
     const res = await client.runMethod( jettonMinterAddress, 'get_jetton_data');
