@@ -62,6 +62,18 @@ async function readContent(res: { gas_used: number; stack: TupleReader }) : Prom
     }
 }
 
+async function readNftItemMetadata(client: TonClient, address: string) : Promise<{
+    persistenceType: persistenceType;
+    metadata: { [s in JettonMetaDataKeys]?: string };
+    isJettonDeployerFaultyOnChainData?: boolean;
+}> {
+    const nftCollectionAddress = Address.parse(address);
+    const res = await client.runMethod(nftCollectionAddress, "get_nft_data")
+    res.stack.skip(2)
+
+    return await readNftMetadata(client, res.stack.readAddress().toString());
+}
+
 async function readNftMetadata(client: TonClient, address: string) : Promise<{
     persistenceType: persistenceType;
     metadata: { [s in JettonMetaDataKeys]?: string };
@@ -158,8 +170,10 @@ async function main() {
     const client = new TonClient({endpoint})
     const jettonData = await readJettonMetadata(client, 'EQANasbzD5wdVx0qikebkchrH64zNgsB38oC9PVu7rG16qNB')
     const nftData = await readNftMetadata(client, "EQCvYf5W36a0zQrS_wc6PMKg6JnyTcFU56NPx1PrAW63qpvt")
+    const nftItemData = await readNftItemMetadata(client, "EQCBSev9a4GXz7inKU2QuXvoa0w4MeTegEu7J7tGgCbv6aWK")
     console.log(jettonData)
     console.log(nftData)
+    console.log(nftItemData)
 }
 
 main()
