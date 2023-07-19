@@ -1,5 +1,5 @@
 import {getHttpEndpoint} from "@orbs-network/ton-access";
-import {Address, Slice, TonClient, TupleReader} from "ton";
+import {Address, Slice, TonClient, TupleReader, TupleItemCell, TupleItemInt} from "ton";
 import {Sha256} from "@aws-crypto/sha256-js";
 import axios from "axios";
 import {parseDict} from "ton-core/dist/dict/parseDict";
@@ -62,16 +62,41 @@ async function readContent(res: { gas_used: number; stack: TupleReader }) : Prom
     }
 }
 
-async function readNftItemMetadata(client: TonClient, address: string) : Promise<{
-    persistenceType: persistenceType;
-    metadata: { [s in JettonMetaDataKeys]?: string };
-    isJettonDeployerFaultyOnChainData?: boolean;
-}> {
+async function readNftItemMetadata(client: TonClient, address: string)  {
     const nftCollectionAddress = Address.parse(address);
-    const res = await client.runMethod(nftCollectionAddress, "get_nft_data")
-    res.stack.skip(2)
+    const nftData = await client.runMethod(nftCollectionAddress, "get_nft_data")
+    nftData.stack.skip(1)
+    const index = nftData.stack.readBigNumber()
+    const collection_address = nftData.stack.readAddress()
+    nftData.stack.skip(1)
+    const individual_content = nftData.stack.readCell()
 
-    return await readNftMetadata(client, res.stack.readAddress().toString());
+    const arg1: TupleItemInt = {
+        type: "int",
+        value: index
+    }
+
+    const arg2: TupleItemCell = {
+        type: "cell",
+        cell: individual_content
+    }
+
+    const nftContent = await client.runMethod(collection_address, "get_nft_content", [arg1, arg2])
+
+    let linkSlice = nftContent.stack.readCell().beginParse()
+
+    const pathBase = bitsToPaddedBuffer(linkSlice.loadBits(linkSlice.remainingBits)).toString()
+
+    linkSlice = individual_content.beginParse()
+    const remainingBits = linkSlice.remainingBits
+
+    if(remainingBits==0){
+        return (await axios.get(pathBase)).data
+    }
+
+    const pathItem = bitsToPaddedBuffer(linkSlice.loadBits(linkSlice.remainingBits)).toString()
+
+    return (await axios.get(pathBase+pathItem)).data
 }
 
 async function readNftMetadata(client: TonClient, address: string) : Promise<{
@@ -170,7 +195,7 @@ async function main() {
     const client = new TonClient({endpoint})
     const jettonData = await readJettonMetadata(client, 'EQANasbzD5wdVx0qikebkchrH64zNgsB38oC9PVu7rG16qNB')
     const nftData = await readNftMetadata(client, "EQCvYf5W36a0zQrS_wc6PMKg6JnyTcFU56NPx1PrAW63qpvt")
-    const nftItemData = await readNftItemMetadata(client, "EQCBSev9a4GXz7inKU2QuXvoa0w4MeTegEu7J7tGgCbv6aWK")
+    const nftItemData = await readNftItemMetadata(client, "EQDTUKV5bMBh2SiL0eXgpO4XxPD1dp5DEpPR1fEIdHLJI40T")
     console.log(jettonData)
     console.log(nftData)
     console.log(nftItemData)
