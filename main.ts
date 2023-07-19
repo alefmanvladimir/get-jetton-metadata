@@ -62,14 +62,20 @@ async function readContent(res: { gas_used: number; stack: TupleReader }) : Prom
     }
 }
 
+async function readJettonWalletMedata(client: TonClient, address: string){
+    const walletData = await client.runMethod(Address.parse(address), "get_wallet_data")
+    walletData.stack.skip(2)
+    return readJettonMetadata(client, walletData.stack.readAddress().toString())
+}
+
 async function readNftItemMetadata(client: TonClient, address: string)  {
-    const nftCollectionAddress = Address.parse(address);
-    const nftData = await client.runMethod(nftCollectionAddress, "get_nft_data")
+    const nftItemAddress = Address.parse(address);
+    const nftData = await client.runMethod(nftItemAddress, "get_nft_data")
     nftData.stack.skip(1)
     const index = nftData.stack.readBigNumber()
     const collection_address = nftData.stack.readAddress()
     nftData.stack.skip(1)
-    const individual_content = nftData.stack.readCell()
+    const individual_item_content = nftData.stack.readCell()
 
     const arg1: TupleItemInt = {
         type: "int",
@@ -78,16 +84,16 @@ async function readNftItemMetadata(client: TonClient, address: string)  {
 
     const arg2: TupleItemCell = {
         type: "cell",
-        cell: individual_content
+        cell: individual_item_content
     }
 
-    const nftContent = await client.runMethod(collection_address, "get_nft_content", [arg1, arg2])
+    const nftCollectionContent = await client.runMethod(collection_address, "get_nft_content", [arg1, arg2])
 
-    let linkSlice = nftContent.stack.readCell().beginParse()
+    let linkSlice = nftCollectionContent.stack.readCell().beginParse()
 
     const pathBase = bitsToPaddedBuffer(linkSlice.loadBits(linkSlice.remainingBits)).toString()
 
-    linkSlice = individual_content.beginParse()
+    linkSlice = individual_item_content.beginParse()
     const remainingBits = linkSlice.remainingBits
 
     if(remainingBits==0){
@@ -196,9 +202,10 @@ async function main() {
     const jettonData = await readJettonMetadata(client, 'EQANasbzD5wdVx0qikebkchrH64zNgsB38oC9PVu7rG16qNB')
     const nftData = await readNftMetadata(client, "EQCvYf5W36a0zQrS_wc6PMKg6JnyTcFU56NPx1PrAW63qpvt")
     const nftItemData = await readNftItemMetadata(client, "EQDTUKV5bMBh2SiL0eXgpO4XxPD1dp5DEpPR1fEIdHLJI40T")
-    console.log(jettonData)
-    console.log(nftData)
-    console.log(nftItemData)
+    const jettonWalletData = await readJettonWalletMedata(client, "EQBhxsx1cHE34hrAM-hRRv7c26G57pe2G6Iw1LTn_5hOuRoV")
+    console.log(jettonWalletData)
+    // console.log(nftData)
+    // console.log(nftItemData)
 }
 
 main()
